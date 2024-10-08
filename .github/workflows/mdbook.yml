@@ -1,0 +1,81 @@
+name: Deploy mdBook site to Pages
+
+on:
+  # 在默认分支上的推送触发
+  push:
+    branches: ["main"]
+  # 定时触发
+  schedule:
+    - cron: '0 0 * * 0' 
+  # 允许手动触发
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      MDBOOK_VERSION: 0.4.36
+     
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 确保获取完整的仓库，以便访问配置文件
+
+      - name: Read config file
+        id: read_config
+        run: |
+          echo "SOURCE_REPO_URL=$(python -c "import configparser; config = configparser.ConfigParser(); config.read('config.ini'); print(config['repository']['url'])")" >> $GITHUB_ENV
+
+
+      # 克隆源仓库到src目录下
+      - name: Clone Source Repository into src
+        run: |
+          rm -rf src
+          git clone ${SOURCE_REPO_URL} src
+          # 如果src目录已经存在且你不想覆盖，可以先检查再克隆
+          # 注意：根据mdBook的配置，可能需要调整下一步的构建路径
+
+      # 可选：生成目录
+      - name: Generate Custom TOC for mdBook
+        run: |
+          python generate_summary.py
+          # 确保你的generate_summary.py脚本适用于你的目录结构和需求，并且可以处理src目录下的内容
+
+      - name: Install mdBook
+        run: |
+          curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf -y | sh
+          rustup update
+          cargo install --version ${MDBOOK_VERSION} mdbook
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v4
+
+      # 确保mdBook的构建路径指向src目录
+      - name: Build with mdBook
+        run: mdbook build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./book  # 根据mdBook的实际输出目录调整
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
