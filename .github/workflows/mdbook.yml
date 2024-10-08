@@ -4,10 +4,6 @@ on:
   # 在默认分支上的推送触发
   push:
     branches: ["main"]
-  # 定时触发
-  schedule:
-    - cron: '0 0 * * 0' 
-  # 允许手动触发
   workflow_dispatch:
 
 permissions:
